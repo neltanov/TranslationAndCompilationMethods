@@ -1,0 +1,10 @@
+import runtime;
+import ds/array;
+
+arraySum(arr: [int]) -> int {
+    fold(arr, 0, \x,y -> x+y);
+}
+
+main() {
+    println(arraySum([1,2,3,4,5]));
+}

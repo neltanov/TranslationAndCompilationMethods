@@ -1,0 +1,13 @@
+import runtime;
+import ds/array;
+import string;
+
+printAsStr(arr1: [int]) -> void {
+  str = strGlue(map(arr1, \i -> i2s(i)), "\", \"");
+  println("\"" + str + "\"");
+  println("");
+}
+
+main () {
+  printAsStr([1, 2, 3, 4]);
+}
