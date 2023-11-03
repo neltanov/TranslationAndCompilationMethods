@@ -1,0 +1,15 @@
+exp = num | sub | mult | add | div | var | pow | neg;
+
+add     = "(" ws exp:l ws "+" ws exp:r ws ")"       { Add(:l, :r) };
+sub     = "(" ws exp:l ws "-" ws exp:r ws ")"       { Subtract(:l, :r) };
+mult    = "(" ws exp:l ws "*" ws exp:r ws ")"       { Multiply(:l, :r) };
+div     = "(" ws exp:l ws "/" ws exp:r ws ")"       { Divide(:l, :r) };
+pow     = "(" ws exp:l ws "^" ws exp:r ws ")"       { Power(:l, :r) };
+neg     = "(" ws "-" ws exp:e ws ")"                { Negative(:e) };
+
+var     = (letter (letter | digit)*) $v            { Variable($v) };
+num     = ("-"? ((digit* "." digit+) | digit+)) $d  { Number(s2d($d)) };
+
+letter = 'a'-'z' | 'A'-'Z' | '_';
+digit = '0'-'9';
+ws = ' '*; 

@@ -1,0 +1,232 @@
+import math/math;
+import string;
+import runtime;
+import sys/system;
+import lingo/pegcode/driver;
+
+Expression ::= Add, Subtract, Multiply, Divide, Power, Negative, Variable, Number;
+
+Add		    (left : Expression, right : Expression);
+Subtract	(left : Expression, right : Expression);
+Multiply	(left : Expression, right : Expression);
+Divide		(left : Expression, right : Expression);
+Power		(left : Expression, right : Number);
+
+Negative    (exp: Expression);
+
+Variable	(var : string);
+Number		(num : double);
+
+
+
+expressionToString(exp: Expression)->string{
+    switch(exp){
+        Add         (l, r) :   "(" 	+ expressionToString(l) + "+" + expressionToString(r) + ")";
+        Subtract	(l, r) :   "(" 	+ expressionToString(l) + "-" + expressionToString(r) + ")";
+        Multiply	(l, r) :   "(" 	+ expressionToString(l) + "*" + expressionToString(r) + ")";
+        Divide		(l, r) :   "(" 	+ expressionToString(l) + "/" + expressionToString(r) + ")";
+		Power		(l, r) :   "(" 	+ expressionToString(l) + "^" + expressionToString(r) + ")";
+        Negative	(v) :      "(-"   + expressionToString(v) + ")";
+
+        Number		(num) : d2s(num);
+        Variable	(v): v;
+    }
+}
+
+calculate(exp : Expression, Variables : Tree<string, double>) -> Maybe<double>{
+    getValue = \l, r, operator -> {
+        switch(calculate(l, Variables)) {
+            Some(left) :  switch(calculate(r, Variables)){
+                Some(right) : operator(left, right);
+                None() : None();
+            }
+            None() : None();
+        }
+    }
+
+    div = \left, right -> if(right == 0.0) {
+                        None();
+                    } else {
+                        Some(left / right);
+                    };
+
+    switch(exp){
+        Add(l, r)       : getValue(l, r, \left, right -> Some(left + right));
+        Subtract(l, r)  : getValue(l, r, \left, right -> Some(left - right));
+        Multiply(l, r)  : getValue(l, r, \left, right -> Some(left * right));
+        Divide(l, r)    : getValue(l, r, div);
+		Power(l, r)     : getValue(l, r, \left, right -> dpow2(left, right));
+
+
+        Negative(e) : switch(calculate(e, Variables)) {
+            Some(value) : Some(-value);
+            None() : None();
+        }
+
+        Number(num) : Some(num);
+        Variable(name) : lookupTree(Variables, name);
+    }
+}
+
+simplify(exp : Expression) -> Expression{
+    switch (exp) {
+        Add(l, r): {
+            left = simplify(l);
+            right = simplify(r);
+            
+            if(left == Number(0.0) && right == Number(0.0)) {
+                Number(0.0);
+            } else if(left == Number(0.0)) {
+                right;
+            } else if(right == Number(0.0)) {
+                left;
+            } else {
+                switch(right){
+                    Negative(v) : Subtract(left, v);
+                    default : Add(left, right); 
+                }
+            }
+        }
+
+        Subtract(l, r): {
+            left = simplify(l);
+            right = simplify(r);
+
+            if(left == Number(0.0) && right == Number(0.0)) {
+                Number(0.0);
+            } else if(left == Number(0.0)){
+                Negative(right);
+            } else if (right == Number(0.0)) {
+                left;
+            } else{
+                switch(right){
+                    Negative(v) : Add(left, v);
+                    default : Subtract(left, right);
+                }
+            }
+        }
+
+        Multiply(l, r): {
+            left = simplify(l);
+            right = simplify(r);
+
+            if(left == Number(1.0)) {
+                right;
+            } else if(right == Number(1.0)) {
+                left;
+            } else if (left == Number(0.0) || right == Number(0.0)) {
+                Number(0.0);
+            } else if(right == left) {
+                Power(right, Number(2.0));
+            } else{
+                Multiply(left, right);
+            }
+        }
+
+        Divide(l, r): {
+            left = simplify(l);
+            right = simplify(r);
+
+            if(right == Number(0.0)){
+                Divide(left, right);
+            } else if((left == Number(0.0)) && right != Number(0.0)) {
+                Number(0.0);
+            } else if(right == Number(1.0)) {
+                left;
+            } else if(right == left) {
+                Number(1.0);
+            } else {
+                Divide(left, right);
+            }
+        }
+
+        Power(l, r) : {
+            left = simplify(l);
+            if(r == Number(0.0)) {
+                Number(1.0);
+            } else if(left == Number(0.0) && r != Number(0.0)) {
+                Number(0.0);
+            } else {
+                Power(left, r);
+            }
+        }
+        
+
+        Negative(e):{
+            simplified = simplify(e);
+
+            switch(simplified){
+                Negative(ex) : ex;
+                default : { 
+                if(simplified == Number(0.0)){
+                    Number(0.0);
+                }else{ 
+                    Negative(simplified)};
+                }
+            }
+        }
+
+        default: exp;
+    }
+}
+
+derivative(exp : Expression, var : string) -> Expression {
+    switch(exp) {
+        Add(l, r)       : Add(derivative(l, var),derivative(r, var));
+        Subtract(l, r)  : Subtract(derivative(l, var),derivative(r, var));
+        Multiply(l, r)  : Add(Multiply(derivative(l, var), r), Multiply(derivative(r, var), l));
+        Divide(l, r)    : Divide(Subtract(Multiply(derivative(l, var), r), Multiply(derivative(r, var), l)), Power(r, Number(2.0)));
+        Power(l, r)     : Multiply(Power(l, r), Divide(Multiply(r, derivative(l, var)), l));
+
+        Negative(e)     : Negative(derivative(e, var));
+
+        Number(value)  : Number(0.0);
+        Variable(v)      : if(v == var) {
+            Number(1.0);
+            } else {
+                Number(0.0);
+            }
+    }
+}
+
+derivativeAndSimplify(exp : Expression, vars : string) -> Expression {
+    simplify(derivative(exp, vars));
+}
+
+lingoGrammar() {
+    compilePegGrammar("#include lingo.lingo");
+}
+
+getVariables() -> Tree<string, double> {
+	parameters_array = getAllUrlParametersArray();
+	fold(parameters_array, makeTree(),\ tree, parameter-> {
+			setTree(tree, parameter[0], s2d(parameter[1]))
+		}
+	);
+}
+
+printValue(name : string, value : Maybe<double>){
+    switch (value) {
+        Some(v) : println(name + d2s(v) + "\n");
+        None()  : println(name + "None" + "\n");
+    }
+}
+
+main() {
+    exp = readUntil("\n");
+    // exp = getUrlParameterDef("expression", "((352/2)+((5235*2)-52))");
+	println("Expression: " + exp + "\n");
+    // f(x) = ((((x^2)+((7*(x^2))*(y^3)))+y)+4)
+	variables = getVariables();
+    ast = parsic(lingoGrammar(), exp, defaultPegActions);
+    simplified = simplify(ast);
+	println("Simplified: " + expressionToString(simplify(ast)) + "\n");
+	//println("AST to expression string: " + expressionToString(ast) + "\n");
+
+    //printValue("Calculated value: ", calculate(ast,variables));
+	// println("Derivative: " + expressionToString(derivative(ast, "x")) + "\n");
+    simplified_derivative = simplify(derivative(ast, "x"));
+    println("Simplified derivative expression: " + expressionToString(simplified_derivative) + "\n");
+
+    printValue("Result: ", calculate(simplified, variables));
+}

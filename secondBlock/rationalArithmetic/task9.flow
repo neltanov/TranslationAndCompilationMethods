@@ -1,0 +1,132 @@
+import ds/tree;
+import lingo/pegcode/driver;
+
+Expression ::= Variable, Number, Negative, Divide, Subtract, Multiply, Add, Pow;
+
+Variable : (name : string);
+Number : (value : int);
+Negative : (e : Expression);
+Divide : (left : Expression, right : Expression);
+Subtract : (left: Expression, right : Expression);
+Multiply : (left : Expression, right : Expression);
+Add : (left : Expression, right : Expression);
+Pow : (left : Expression, right : Number);
+Rational(numerator: int, denominator: int);
+
+multiply(l: Rational, r: Rational) -> Rational {
+	Rational(l.numerator * r.numerator, l.denominator * r.denominator);
+}
+
+divide(l: Rational, r: Rational) -> Rational {
+	Rational(l.numerator * r.denominator, l.denominator * r.numerator);
+}
+
+powerR(r : Rational, power : Number) -> Rational {
+    if (power.value == 0) {
+        Rational(1, 1);
+    } else {
+		Rational(pow(r.numerator, power.value), pow(r.denominator, power.value));
+    }
+}
+
+add(l: Rational, r: Rational) -> Rational {
+    if (l.denominator == r.denominator) {
+        Rational(l.numerator + r.numerator, l.denominator);
+    } else {
+		Rational(l.numerator * r.denominator + r.numerator * l.denominator, l.denominator * r.denominator);
+    }
+}
+
+subtract(l: Rational, r: Rational) -> Rational {
+    if (l.denominator == r.denominator) {
+        Rational(l.numerator - r.numerator, l.denominator);
+    } else {
+		Rational(l.numerator * r.denominator - r.numerator * l.denominator, l.denominator * r.denominator);
+    }
+}
+
+negative(r: Rational) -> Rational {
+    Rational(-r.numerator, r.denominator);
+}
+
+simplifyRational(r: Rational) -> Rational{
+	commonDivider = gcd(r.numerator, r.denominator);
+	Rational(r.numerator / commonDivider, r.denominator / commonDivider);
+}
+
+r2s(r: Rational) -> string {
+    if (r.denominator == 1) {
+        i2s(r.numerator);
+    } else {
+        concatStrings([i2s(r.numerator), "/", i2s(r.denominator)]);
+    }
+}
+
+simplifiedR2Str(r: Rational) -> string {
+	r2s(simplifyRational(r));
+}
+
+initGrammar() {
+	compilePegGrammar("#include lingo.lingo");
+}
+
+calculate(e : Expression, Variables : Tree<string, Rational>) -> Maybe<Rational> {
+	getValue = \l, r, operator -> {
+        switch(calculate(l, Variables)) {
+            Some(left) :  switch(calculate(r, Variables)){
+                Some(right) : operator(left, right);
+                None() : None();
+            }
+            None() : None();
+        }
+    }
+	switch(e) {
+		Variable(x) : {
+			switch(lookupTree(Variables, x)) {
+				Some(val): Some(val);
+				None(): None();
+			}
+		}
+		Number(c) : {
+			Some(Rational(c, 1));
+		}
+		Negative(r) : {
+			switch(calculate(r, Variables)) {
+				Some(expr): Some(negative(expr));
+				None(): None();
+			};
+		}
+		Divide(l, r) : getValue(l, r, \left, right -> Some(divide(left, right)));
+		Subtract(l, r) : getValue(l, r, \left, right -> Some(subtract(left, right)));
+		Multiply(l, r) : getValue(l, r, \left, right -> Some(multiply(left, right)));
+		Add(l, r)      : getValue(l, r, \left, right -> Some(add(left, right)));
+		Pow(l, r)      : switch(calculate(l, Variables)) {
+            Some(left) :  Some(powerR(left, r));
+            None() : None();
+        };
+	}
+}
+
+calc(expr : string, Variables : Tree<string, Rational>) -> Maybe<Rational> {
+	calculate(parsic(initGrammar(), expr, defaultPegActions), Variables);
+}
+
+getVariables() -> Tree<string, Rational> {
+	tree : Tree<string, Rational> = setTree(makeTree(), "x", Rational(1, 2));
+	setTree(tree, "y", Rational(2, 1));
+}
+
+main() {
+	variables = getVariables();
+	expr = "(x ^ 2)";
+	// expr = "((x * y) / ((5 + 1) * 3))";
+	switch(calc(expr, variables)) {
+		Some(val): {
+			println(expr);
+			println("raw result = " + r2s(val));
+			println("result = " + simplifiedR2Str(val));
+		};
+		None(): println("Wrong calc result");
+	}
+	quit(0);
+}
